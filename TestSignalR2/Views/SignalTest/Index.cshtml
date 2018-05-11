@@ -1,0 +1,117 @@
+﻿
+@{
+    ViewBag.Title = "Index";
+}
+
+<div class="container">
+    <div id="yourname"></div>
+    <input type="hidden" id="displayname" />
+    Send to <input type="text" id="to" size="5" /> Message <input type="text" id="message" />
+    <input type="button" id="sendmessage" value="Send" />
+    <ul id="discussion"></ul>
+    <input type="hidden" id="status" />
+</div>
+
+<div>
+    <table id="" class="table table-bordered">
+        <thead>
+            <tr>
+                <td>user</td>
+                <td>status</td>
+            </tr>
+        </thead>
+        <tbody id="userList"></tbody>
+    </table>
+</div>
+@section scripts
+{
+    <script type="text/javascript">
+        $(function () {
+
+            // Declare a proxy to reference the hub.
+            var chat = $.connection.myChatHub;
+            // Create a function that the hub can call to broadcast messages.
+            chat.client.broadcastMessage = function (name, message, to) {
+                var encodedName;
+                var encodedMsg;
+                if (to != undefined && to.length > 0) {
+                    if (to == $('#displayname').val()) {
+                        // Html encode display name and message.
+                        encodedName = $('<div />').text(name).html();
+                        encodedMsg = $('<div />').text(message).html(); // Add the message to the page.
+                        $('#discussion').append('<li><strong>' + encodedName
+                            + '</strong>:&nbsp;&nbsp;' + encodedMsg + '</li>');
+                    }
+                } else {
+                    // Html encode display name and message.
+                    encodedName = $('<div />').text(name).html();
+                    encodedMsg = $('<div />').text(message).html(); // Add the message to the page.
+                    $('#discussion').append('<li><strong>' + encodedName
+                        + '</strong>:&nbsp;&nbsp;' + encodedMsg + '</li>');
+                }
+
+            };
+
+            chat.client.updateStatus = function (user, status) {
+                console.log("[" + (new Date()).toString() + "] SignalR StateChange");
+                if ($("#" + user).html() == undefined) {
+                    var type = "green";
+                    if (status == "offline") {
+                        type = "red";
+                    }
+                    var row = ['<tr><td id="', user, '">', user, '</td><td id="', user, 'status" style="color:', type, '">', status, '</td></tr>'].join('');
+                    $("#userList").append(row);
+                } else {
+                    $("#" + user + "status").html(status);
+                }
+
+//                var row = ['<tr><td id="', user, '">', user, '</td><td id="', user, 'status" >', status, '</td></tr>'].join('');
+//                $("#userList").append(row);
+            }
+
+            // Get the user name and store it to prepend to messages.
+            $('#displayname').val(prompt('Enter your name:', ''));
+            $('#yourname').html('Your name = ' + $('#displayname').val());
+
+            // Set initial focus to message input box.
+            $('#message').focus();
+            // Start the connection.
+            $.connection.hub.start().done(function () {
+
+                var display = $('#displayname').val();
+                $.connection.hub.connectionSlow = function () { console.log("[" + (new Date()).toString() + "] SignalR Connection Slow"); };
+                $.connection.hub.reconnecting = function () { console.log("[" + (new Date()).toString() + "] SignalR Connection Reconnecting"); };
+                $.connection.hub.reconnected = function () { console.log("[" + (new Date()).toString() + "] SignalR Connection Reconnected"); };
+                $.connection.hub.disconnected = function() {
+                    console.log("[" + (new Date()).toString() + "] SignalR Connection Disconnected");
+                    chat.server.myChatOffline(display);
+                };
+                $.connection.hub.stateChanged = function (state) {
+                    console.log("[" + (new Date()).toString() + "] SignalR StateChange");
+                    chat.server.myChatUpdateState(display, state.newState);
+                };
+
+                $.connection.hub.logging = true;
+                $('#sendmessage').click(function () {
+                    // Call the Send method on the hub.
+                    var to = $('#to').val();
+                    var message = $('#message').val();
+                    if (to.length > 0) {
+                        chat.server.myChatSendTo(display, message, to);
+                    } else {
+                        chat.server.myChatSend(display, message);
+                    }
+                    chat.server.myChatOnline(display);
+                    // Clear text box and reset focus for next comment.
+                    $('#message').val('').focus();
+                });
+                chat.server.myChatOnline(display);
+                //                $.connection.hub.stateChanged(function (state) {
+//                    var display = $('#displayname').val();
+//                    chat.server.myChatUpdateState(display, state.newState);
+//                });
+            });
+        });
+    </script>
+}
+
